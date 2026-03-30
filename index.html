@@ -600,27 +600,31 @@ function resetAll() {
 // ── Drag del texto ──
 var isDragging = false;
 var dragStartY = 0;
+var dragLastY = 0;
 var dragStartOffset = 0;
 var wasPaused = false;
+var totalDragDelta = 0;
 
 var overlay = document.getElementById('promptOverlay');
 
 function getClientY(e) {
-  return e.touches ? e.touches[0].clientY : e.clientY;
+  if (e.touches && e.touches.length > 0) return e.touches[0].clientY;
+  if (e.changedTouches && e.changedTouches.length > 0) return e.changedTouches[0].clientY;
+  return e.clientY;
 }
 
 overlay.addEventListener('mousedown', onDragStart);
 overlay.addEventListener('touchstart', onDragStart, { passive: false });
 
 function onDragStart(e) {
-  // Solo si estamos en paso2 activo
   if (!document.getElementById('step2').classList.contains('active')) return;
   e.preventDefault();
   isDragging = true;
+  totalDragDelta = 0;
   wasPaused = !isScrolling;
-  // Pausar scroll mientras arrastramos
   isScrolling = false;
   dragStartY = getClientY(e);
+  dragLastY  = dragStartY;
   dragStartOffset = scrollOffset;
   overlay.style.cursor = 'grabbing';
 
@@ -633,8 +637,11 @@ function onDragStart(e) {
 function onDragMove(e) {
   if (!isDragging) return;
   e.preventDefault();
-  var dy = dragStartY - getClientY(e); // arrastrar hacia abajo = dy negativo = retroceder
+  var currentY = getClientY(e);
+  totalDragDelta = Math.abs(currentY - dragStartY);
+  var dy = dragStartY - currentY;
   scrollOffset = Math.max(0, dragStartOffset + dy);
+  dragLastY = currentY;
   positionScroller(scrollOffset);
 }
 
@@ -643,17 +650,16 @@ function onDragEnd(e) {
   isDragging = false;
   overlay.style.cursor = 'grab';
 
-  var dy = dragStartY - getClientY(e);
-  var moved = Math.abs(dy) > 5; // si apenas se movió, fue un click = pausa/reanuda
-
-  if (!moved) {
-    // Click simple: toggle pausa/reanuda (solo si estaba grabando)
+  // Si el dedo apenas se movió (<8px), es tap = toggle pausa
+  if (totalDragDelta < 8) {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       isScrolling = !wasPaused;
     }
   } else {
-    // Fue arrastre: reanudar si estaba scrolling antes
-    if (!wasPaused) isScrolling = true;
+    // Fue arrastre real: siempre reanudar si estábamos grabando
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      isScrolling = true;
+    }
   }
 
   document.removeEventListener('mousemove', onDragMove);
