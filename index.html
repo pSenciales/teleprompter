@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Teleprompter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f13;
+      color: #f0f0f0;
+      min-height: 100vh;
+    }
+
+    /* ─── PASOS ─── */
+    .step { display: none; padding: 30px 20px; max-width: 860px; margin: 0 auto; }
+    .step.active { display: block; }
+
+    h1 { font-size: 1.6rem; margin-bottom: 6px; color: #fff; }
+    p.sub { color: #999; margin-bottom: 20px; font-size: .9rem; }
+
+    /* ─── PASO 1 ─── */
+    #step1 textarea {
+      width: 100%;
+      height: 260px;
+      background: #1a1a24;
+      border: 1px solid #333;
+      border-radius: 10px;
+      color: #f0f0f0;
+      font-size: 1rem;
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+      line-height: 1.6;
+    }
+    #step1 textarea:focus { border-color: #6c63ff; }
+
+    /* ─── PASO 2 ─── */
+    .recorder-layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+    .canvas-wrap {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+    }
+    canvas#preview {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .controls-panel {
+      background: #1a1a24;
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ctrl-group label {
+      display: block;
+      font-size: .8rem;
+      color: #aaa;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .ctrl-group input[type=range] {
+      width: 100%;
+      accent-color: #6c63ff;
+    }
+    .ctrl-group select,
+    .ctrl-group input[type=color] {
+      width: 100%;
+      background: #252535;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #f0f0f0;
+      padding: 6px 8px;
+      font-size: .9rem;
+    }
+    .ctrl-group input[type=color] { height: 36px; padding: 2px; cursor: pointer; }
+    .val-display {
+      font-size: .85rem;
+      color: #6c63ff;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .pos-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .pos-btn {
+      background: #252535;
+      border: 1px solid #444;
+      border-radius: 5px;
+      color: #ccc;
+      font-size: .75rem;
+      padding: 5px 2px;
+      cursor: pointer;
+      transition: background .15s;
+      text-align: center;
+    }
+    .pos-btn:hover, .pos-btn.active { background: #6c63ff; color: #fff; border-color: #6c63ff; }
+
+    /* ─── PASO 3 ─── */
+    #step3 video {
+      width: 100%;
+      border-radius: 12px;
+      background: #000;
+      max-height: 480px;
+    }
+
+    /* ─── BOTONES ─── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 24px;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary { background: #6c63ff; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #574fd6; }
+    .btn-danger  { background: #e03e3e; color: #fff; }
+    .btn-danger:hover:not(:disabled)  { background: #bc2929; }
+    .btn-success { background: #2ecc71; color: #111; }
+    .btn-success:hover:not(:disabled) { background: #27ae60; }
+    .btn-ghost   { background: transparent; color: #aaa; border: 1px solid #444; }
+    .btn-ghost:hover { background: #252535; color: #fff; }
+
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+    /* ─── BADGE GRABANDO ─── */
+    .rec-badge {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: rgba(224,62,62,.85);
+      color: #fff;
+      font-size: .8rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      position: absolute;
+      top: 12px;
+      left: 12px;
+    }
+    .rec-badge.show { display: flex; }
+    .rec-dot {
+      width: 8px; height: 8px;
+      background: #fff;
+      border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ─── INDICADOR VELOCIDAD ─── */
+    #speedIndicator {
+      font-size: .8rem;
+      color: #6c63ff;
+      margin-top: 3px;
+    }
+
+    /* ─── STEP HEADER ─── */
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .step-num {
+      background: #6c63ff;
+      color: #fff;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .85rem; flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+      .recorder-layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ PASO 1 ═══════════════ -->
+<div id="step1" class="step active">
+  <div class="step-header">
+    <div class="step-num">1</div>
+    <div>
+      <h1>Escribe tu guión</h1>
+      <p class="sub">Pega o escribe el texto que quieres leer mientras te grabas.</p>
+    </div>
+  </div>
+  <textarea id="scriptInput" placeholder="Escribe aquí tu guión...&#10;&#10;Ejemplo: Hola a todos, hoy os voy a hablar sobre..."></textarea>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="goToStep2()">Continuar →</button>
+  </div>
+</div>
+
+<!-- ═══════════════ PASO 2 ═══════════════ -->
+<div id="step2" class="step">
+  <div class="step-header">
+    <div class="step-num">2</div>
+    <div>
+      <h1>Graba con teleprompter</h1>
+      <p class="sub">Ajusta el texto y la velocidad. Pulsa Grabar cuando estés listo.</p>
+    </div>
+  </div>
+
+  <div class="recorder-layout">
+    <!-- CANVAS -->
+    <div class="canvas-wrap">
+      <canvas id="preview" width="1280" height="720"></canvas>
+      <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC</div>
+    </div>
+
+    <!-- PANEL CONTROLES -->
+    <div class="controls-panel">
+
+      <div class="ctrl-group">
+        <label>Velocidad de scroll</label>
+        <input type="range" id="speedSlider" min="10" max="300" value="60" oninput="updateSpeed(this.value)">
+        <div class="val-display" id="speedVal">60 px/s</div>
+        <div id="speedIndicator">≈ velocidad media</div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Tamaño de fuente</label>
+        <input type="range" id="fontSizeSlider" min="24" max="96" value="44" oninput="updateFontSize(this.value)">
+        <div class="val-display" id="fontSizeVal">44 px</div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Color del texto</label>
+        <input type="color" id="textColor" value="#ffffff" oninput="redrawCanvas()">
+      </div>
+
+      <div class="ctrl-group">
+        <label>Color de fondo texto</label>
+        <input type="color" id="bgColor" value="#000000" oninput="redrawCanvas()">
+        <div style="margin-top:6px; display:flex; align-items:center; gap:8px;">
+          <label style="text-transform:none; font-size:.8rem; color:#bbb; display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="checkbox" id="transparentBg" onchange="redrawCanvas()"> Fondo transparente
+          </label>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Posición del texto</label>
+        <div class="pos-grid">
+          <button class="pos-btn" onclick="setPos('top-left')">↖</button>
+          <button class="pos-btn" onclick="setPos('top-center')">↑</button>
+          <button class="pos-btn" onclick="setPos('top-right')">↗</button>
+          <button class="pos-btn" onclick="setPos('mid-left')">←</button>
+          <button class="pos-btn active" id="pos-mid-center" onclick="setPos('mid-center')">●</button>
+          <button class="pos-btn" onclick="setPos('mid-right')">→</button>
+          <button class="pos-btn" onclick="setPos('bot-left')">↙</button>
+          <button class="pos-btn" onclick="setPos('bot-center')">↓</button>
+          <button class="pos-btn" onclick="setPos('bot-right')">↘</button>
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <label>Fuente</label>
+        <select id="fontFamily" onchange="redrawCanvas()">
+          <option value="Arial">Arial</option>
+          <option value="Georgia">Georgia</option>
+          <option value="'Courier New'">Courier New</option>
+          <option value="Verdana">Verdana</option>
+          <option value="Impact">Impact</option>
+        </select>
+      </div>
+
+      <div class="btn-row" style="margin-top:0; flex-direction:column;">
+        <button class="btn btn-primary" id="btnRecord" onclick="startRecording()">⏺ Grabar</button>
+        <button class="btn btn-danger" id="btnStop" onclick="stopRecording()" disabled>⏹ Detener</button>
+        <button class="btn btn-ghost" onclick="goToStep1()" style="margin-top:4px;">← Volver</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ PASO 3 ═══════════════ -->
+<div id="step3" class="step">
+  <div class="step-header">
+    <div class="step-num">3</div>
+    <div>
+      <h1>Tu grabación lista</h1>
+      <p class="sub">Previsualiza y descarga tu vídeo.</p>
+    </div>
+  </div>
+  <video id="resultVideo" controls playsinline></video>
+  <div class="btn-row">
+    <button class="btn btn-success" id="btnDownload">⬇ Descargar vídeo</button>
+    <button class="btn btn-ghost" onclick="resetAll()">🔄 Nueva grabación</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  ESTADO GLOBAL
+// ══════════════════════════════════════
+let stream = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let animFrame = null;
+let scrollY = 0;
+let isRecording = false;
+let lastTs = null;
+let textPos = 'mid-center';
+let mimeType = 'video/webm;codecs=vp8,opus';
+
+const canvas = document.getElementById('preview');
+const ctx    = canvas.getContext('2d');
+
+// ══════════════════════════════════════
+//  PASO 1 → 2
+// ══════════════════════════════════════
+async function goToStep2() {
+  const text = document.getElementById('scriptInput').value.trim();
+  if (!text) { alert('Escribe tu guión primero.'); return; }
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch(e) {
+    alert('No se pudo acceder a la cámara/micrófono: ' + e.message);
+    return;
+  }
+
+  scrollY = 0;
+  lastTs = null;
+  showStep('step2');
+  startPreviewLoop();
+}
+
+function goToStep1() {
+  stopPreviewLoop();
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  showStep('step1');
+}
+
+// ══════════════════════════════════════
+//  LOOP DE CANVAS (preview + grabación)
+// ══════════════════════════════════════
+function startPreviewLoop() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  function loop(ts) {
+    const dt = lastTs ? (ts - lastTs) / 1000 : 0;
+    lastTs = ts;
+    if (isRecording) scrollY += getSpeed() * dt;
+    drawFrame();
+    animFrame = requestAnimationFrame(loop);
+  }
+  animFrame = requestAnimationFrame(loop);
+}
+
+function stopPreviewLoop() {
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+}
+
+function drawFrame() {
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // — cámara
+  if (stream) {
+    const vt = stream.getVideoTracks();
+    if (vt.length) {
+      const vid = document.createElement('video'); // usamos un offscreen ref
+      // Usamos videoEl persistente
+    }
+  }
+  if (videoEl && videoEl.readyState >= 2) {
+    ctx.drawImage(videoEl, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  drawTeleprompterText(W, H);
+}
+
+// Video element persistente para el stream
+let videoEl = null;
+function ensureVideoEl() {
+  if (!videoEl) {
+    videoEl = document.createElement('video');
+    videoEl.autoplay = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+  }
+  if (stream && videoEl.srcObject !== stream) {
+    videoEl.srcObject = stream;
+    videoEl.play().catch(()=>{});
+  }
+}
+
+// override drawFrame para usar videoEl correctamente
+function drawFrame() {
+  ensureVideoEl();
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  if (videoEl && videoEl.readyState >= 2) {
+    ctx.drawImage(videoEl, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, W, H);
+  }
+  drawTeleprompterText(W, H);
+}
+
+// ══════════════════════════════════════
+//  DIBUJAR TEXTO TELEPROMPTER
+// ══════════════════════════════════════
+function drawTeleprompterText(W, H) {
+  const text      = document.getElementById('scriptInput').value;
+  const fontSize  = parseInt(document.getElementById('fontSizeSlider').value);
+  const fontFam   = document.getElementById('fontFamily').value;
+  const txtColor  = document.getElementById('textColor').value;
+  const bgCol     = document.getElementById('bgColor').value;
+  const transBg   = document.getElementById('transparentBg').checked;
+
+  ctx.font = `${fontSize}px ${fontFam}`;
+  ctx.textBaseline = 'top';
+
+  const maxW   = W * 0.80;
+  const lineH  = fontSize * 1.45;
+  const lines  = wrapText(ctx, text, maxW);
+  const totalH = lines.length * lineH;
+
+  // Zona de texto según posición
+  const zone = getZone(W, H, maxW);
+  const visH = zone.h;
+
+  // scroll relativo a la zona
+  const maxScroll = Math.max(0, totalH - visH);
+  const clampedY  = Math.min(scrollY, maxScroll);
+
+  ctx.save();
+  ctx.rect(zone.x, zone.y, maxW + 20, visH);
+  ctx.clip();
+
+  if (!transBg) {
+    ctx.fillStyle = bgCol + 'cc';
+    ctx.fillRect(zone.x - 10, zone.y, maxW + 30, visH);
+  }
+
+  ctx.fillStyle = txtColor;
+  lines.forEach((line, i) => {
+    const y = zone.y + (i * lineH) - clampedY;
+    if (y + lineH > zone.y && y < zone.y + visH) {
+      ctx.fillText(line, zone.x, y);
+    }
+  });
+
+  ctx.restore();
+}
+
+function getZone(W, H, maxW) {
+  const pad = 40;
+  const zoneH = H * 0.55;
+  const zoneW = maxW + 20;
+
+  const xMap = { left: pad, center: (W - zoneW) / 2, right: W - zoneW - pad };
+  const yMap = { top: pad, mid: (H - zoneH) / 2, bot: H - zoneH - pad };
+
+  const [vert, horiz] = textPos.split('-');
+  return { x: xMap[horiz] ?? xMap.center, y: yMap[vert] ?? yMap.mid, h: zoneH };
+}
+
+function wrapText(ctx, text, maxW) {
+  const result = [];
+  text.split('\n').forEach(paragraph => {
+    const words = paragraph.split(' ');
+    let line = '';
+    words.forEach(word => {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        result.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    });
+    if (line) result.push(line);
+  });
+  return result;
+}
+
+// ══════════════════════════════════════
+//  CONTROLES
+// ══════════════════════════════════════
+function getSpeed() { return parseInt(document.getElementById('speedSlider').value); }
+
+function updateSpeed(v) {
+  document.getElementById('speedVal').textContent = v + ' px/s';
+  const ind = document.getElementById('speedIndicator');
+  if (v < 50)       ind.textContent = '🐢 Velocidad lenta';
+  else if (v < 120) ind.textContent = '⚡ Velocidad media';
+  else              ind.textContent = '🚀 Velocidad rápida';
+}
+
+function updateFontSize(v) {
+  document.getElementById('fontSizeVal').textContent = v + ' px';
+}
+
+function setPos(pos) {
+  textPos = pos;
+  document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
+  const id = 'pos-' + pos;
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+  // fallback: marca por onclick
+  event.target.classList.add('active');
+}
+
+function redrawCanvas() { /* el loop ya redibuja continuamente */ }
+
+// ══════════════════════════════════════
+//  GRABAR
+// ══════════════════════════════════════
+function startRecording() {
+  recordedChunks = [];
+  scrollY = 0;
+  lastTs = null;
+
+  // Capturamos el canvas + audio del stream original
+  const canvasStream = canvas.captureStream(30);
+  stream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
+  // Detectar mimeType soportado
+  const types = [
+    'video/mp4;codecs=h264,aac',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  mimeType = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+  mediaRecorder = new MediaRecorder(canvasStream, mimeType ? { mimeType } : {});
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = onRecordingStop;
+  mediaRecorder.start(100);
+
+  isRecording = true;
+  document.getElementById('recBadge').classList.add('show');
+  document.getElementById('btnRecord').disabled = true;
+  document.getElementById('btnStop').disabled   = false;
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  isRecording = false;
+  document.getElementById('recBadge').classList.remove('show');
+  document.getElementById('btnRecord').disabled = false;
+  document.getElementById('btnStop').disabled   = true;
+}
+
+function onRecordingStop() {
+  stopPreviewLoop();
+  if (stream) { stream.getTracks().forEach(t => t.stop()); }
+
+  const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+  const url  = URL.createObjectURL(blob);
+
+  const vid = document.getElementById('resultVideo');
+  vid.src = url;
+
+  document.getElementById('btnDownload').onclick = () => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'teleprompter-grabacion.' + ext;
+    a.click();
+  };
+
+  showStep('step3');
+}
+
+// ══════════════════════════════════════
+//  UTILIDADES
+// ══════════════════════════════════════
+function showStep(id) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function resetAll() {
+  videoEl = null;
+  scrollY = 0;
+  recordedChunks = [];
+  document.getElementById('resultVideo').src = '';
+  document.getElementById('scriptInput').value = '';
+  showStep('step1');
+}
+</script>
+</body>
+</html>
