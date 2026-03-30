@@ -99,7 +99,7 @@
     /* Overlay teleprompter */
     #promptOverlay {
       position: absolute; inset: 0;
-      pointer-events: none; overflow: hidden;
+      pointer-events: auto; overflow: hidden; cursor: grab;
     }
     #promptScroller {
       position: absolute; left: 0; right: 0;
@@ -283,6 +283,12 @@
         <div id="promptText"></div>
       </div>
     </div>
+        <div id="dragHint" style="
+      position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,0.55); color:#aaa; font-size:.72rem;
+      padding:4px 12px; border-radius:20px; pointer-events:none; z-index:14;
+      white-space:nowrap; transition:opacity .5s;
+    ">&#9632; clic = pausar &nbsp;|&nbsp; &#8597; arrastrar = reposicionar</div>
     <div id="countdown"><div id="countdownNum">5</div></div>
     <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC</div>
   </div>
@@ -292,7 +298,7 @@
 <div id="step3" class="step">
   <div class="step-header">
     <div class="step-num">3</div>
-    <div><h1>Tu grabación lista</h1></div>
+    <div><h1>Tu grabación lista</h1><p class="sub">El vídeo no tiene texto superpuesto.</p></div>
   </div>
   <video id="resultVideo" controls playsinline></video>
   <div class="btn-row">
@@ -492,6 +498,7 @@ function beginRecording() {
   isScrolling = true;
   startScrollLoop();
   document.getElementById('recBadge').classList.add('show');
+  setTimeout(function() { var h=document.getElementById('dragHint'); if(h) h.style.opacity='0'; }, 3000);
   document.getElementById('btnRecord').disabled = true;
   document.getElementById('btnStop').disabled   = false;
 }
@@ -589,6 +596,72 @@ function resetAll() {
   document.getElementById('btnContinue').textContent = 'Continuar →';
   showStep('step1');
 }
+
+// ── Drag del texto ──
+var isDragging = false;
+var dragStartY = 0;
+var dragStartOffset = 0;
+var wasPaused = false;
+
+var overlay = document.getElementById('promptOverlay');
+
+function getClientY(e) {
+  return e.touches ? e.touches[0].clientY : e.clientY;
+}
+
+overlay.addEventListener('mousedown', onDragStart);
+overlay.addEventListener('touchstart', onDragStart, { passive: false });
+
+function onDragStart(e) {
+  // Solo si estamos en paso2 activo
+  if (!document.getElementById('step2').classList.contains('active')) return;
+  e.preventDefault();
+  isDragging = true;
+  wasPaused = !isScrolling;
+  // Pausar scroll mientras arrastramos
+  isScrolling = false;
+  dragStartY = getClientY(e);
+  dragStartOffset = scrollOffset;
+  overlay.style.cursor = 'grabbing';
+
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup',   onDragEnd);
+  document.addEventListener('touchmove', onDragMove, { passive: false });
+  document.addEventListener('touchend',  onDragEnd);
+}
+
+function onDragMove(e) {
+  if (!isDragging) return;
+  e.preventDefault();
+  var dy = dragStartY - getClientY(e); // arrastrar hacia abajo = dy negativo = retroceder
+  scrollOffset = Math.max(0, dragStartOffset + dy);
+  positionScroller(scrollOffset);
+}
+
+function onDragEnd(e) {
+  if (!isDragging) return;
+  isDragging = false;
+  overlay.style.cursor = 'grab';
+
+  var dy = dragStartY - getClientY(e);
+  var moved = Math.abs(dy) > 5; // si apenas se movió, fue un click = pausa/reanuda
+
+  if (!moved) {
+    // Click simple: toggle pausa/reanuda (solo si estaba grabando)
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      isScrolling = !wasPaused;
+    }
+  } else {
+    // Fue arrastre: reanudar si estaba scrolling antes
+    if (!wasPaused) isScrolling = true;
+  }
+
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup',   onDragEnd);
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('touchend',  onDragEnd);
+}
+
 </script>
 </body>
 </html>
