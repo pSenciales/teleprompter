@@ -301,6 +301,10 @@
     <div><h1>Tu grabación lista</h1><p class="sub">El vídeo no tiene texto superpuesto.</p></div>
   </div>
   <video id="resultVideo" controls playsinline></video>
+  <div id="savedToDiskMsg" style="display:none; background:#1a2e1a; border:1px solid #2ecc71; border-radius:10px; padding:20px 24px; margin-top:10px; color:#2ecc71; font-size:.95rem; line-height:1.6;">
+    <strong>&#10003; Vídeo guardado directamente en tu disco</strong><br>
+    <span style="color:#aaa; font-size:.85rem;">Como la grabación se escribió directo al archivo para no usar memoria, no es posible previsualizarla aquí. Encuéntrala en la ubicación que elegiste al iniciar la grabación.</span>
+  </div>
   <div class="btn-row">
     <button class="btn btn-success" id="btnDownload">&#11015; Descargar</button>
     <button class="btn btn-ghost"   onclick="resetAll()">&#128260; Nueva grabación</button>
@@ -313,13 +317,16 @@
 <script>
 var stream = null;
 var mediaRecorder = null;
-var recordedChunks = [];
+var recordedChunks = [];      // fallback: memoria
+var usingFilePicker = false;  // true = escribiendo directo a disco
+var fileWritable = null;      // FileSystemWritableFileStream
 var animFrame = null;
 var scrollOffset = 0;
 var isScrolling = false;
 var lastTs = null;
 var mimeType = '';
 var currentPos = 'middle';
+var safetyTimer = null;
 
 function showError(msg) {
   var t = document.getElementById('errorToast');
@@ -479,21 +486,75 @@ function beginRecording() {
   positionScroller(0);
 
   var types = [
-    'video/mp4;codecs=h264,aac', 'video/mp4',
-    'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'
+    'video/webm;codecs=vp8,opus', 'video/webm',
+    'video/mp4;codecs=h264,aac', 'video/mp4'
   ];
   mimeType = '';
   for (var i = 0; i < types.length; i++) {
     if (MediaRecorder.isTypeSupported(types[i])) { mimeType = types[i]; break; }
   }
+  var ext = mimeType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
 
+  // Intentar usar File System Access API (Chrome/Edge desktop/Android)
+  // para escribir directamente a disco sin acumular en RAM
+  if (window.showSaveFilePicker) {
+    window.showSaveFilePicker({
+      suggestedName: 'teleprompter.' + ext,
+      types: [{ description: 'Vídeo', accept: { 'video/*': ['.' + ext] } }]
+    }).then(function(fileHandle) {
+      return fileHandle.createWritable();
+    }).then(function(writable) {
+      fileWritable = writable;
+      usingFilePicker = true;
+      startMediaRecorder();
+    }).catch(function(err) {
+      if (err.name !== 'AbortError') {
+        // Usuario canceló o no soportado → fallback a memoria
+        console.warn('FilePicker falló, usando memoria:', err);
+      }
+      usingFilePicker = false;
+      startMediaRecorder();
+    });
+  } else {
+    usingFilePicker = false;
+    startMediaRecorder();
+  }
+}
+
+function startMediaRecorder() {
+  recordedChunks = [];
   var opts = mimeType ? { mimeType: mimeType } : {};
   mediaRecorder = new MediaRecorder(stream, opts);
+
   mediaRecorder.ondataavailable = function(e) {
-    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+    if (!e.data || e.data.size === 0) return;
+    if (usingFilePicker && fileWritable) {
+      // Escribe chunk directo al disco, sin guardar en RAM
+      fileWritable.write(e.data).catch(function(err) {
+        showError('Error escribiendo al disco: ' + err.message);
+        stopRecording();
+      });
+    } else {
+      recordedChunks.push(e.data);
+    }
   };
+
+  mediaRecorder.onerror = function(e) {
+    showError('Error de grabación: ' + (e.error && e.error.message ? e.error.message : 'desconocido'));
+    stopRecording();
+  };
+
   mediaRecorder.onstop = onRecordingStop;
-  mediaRecorder.start(100);
+
+  // Flush periódico para evitar buffer interno grande
+  clearInterval(safetyTimer);
+  safetyTimer = setInterval(function() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      try { mediaRecorder.requestData(); } catch(e) {}
+    }
+  }, 3000);
+
+  mediaRecorder.start(2000);  // chunks de 2s
 
   isScrolling = true;
   startScrollLoop();
@@ -504,6 +565,7 @@ function beginRecording() {
 }
 
 function stopRecording() {
+  clearInterval(safetyTimer);
   if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
   isScrolling = false;
   stopScrollLoop();
@@ -513,16 +575,36 @@ function stopRecording() {
 }
 
 function onRecordingStop() {
+  clearInterval(safetyTimer);
   if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
-  var ext  = mimeType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
-  var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
-  var url  = URL.createObjectURL(blob);
-  document.getElementById('resultVideo').src = url;
-  document.getElementById('btnDownload').onclick = function() {
-    var a = document.createElement('a');
-    a.href = url; a.download = 'teleprompter.' + ext; a.click();
-  };
-  showStep('step3');
+
+  if (usingFilePicker && fileWritable) {
+    // Cerrar el stream → el archivo ya está guardado en disco
+    fileWritable.close().then(function() {
+      fileWritable = null;
+      usingFilePicker = false;
+      // No podemos previsualizar (el archivo está en disco, no en memoria)
+      showStep('step3');
+      document.getElementById('resultVideo').style.display = 'none';
+      document.getElementById('savedToDiskMsg').style.display = 'block';
+      document.getElementById('btnDownload').style.display = 'none';
+    }).catch(function(err) {
+      showError('Error cerrando archivo: ' + err.message);
+    });
+  } else {
+    var ext = mimeType.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+    var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+    var url  = URL.createObjectURL(blob);
+    document.getElementById('resultVideo').style.display = 'block';
+    document.getElementById('savedToDiskMsg').style.display = 'none';
+    document.getElementById('btnDownload').style.display = 'inline-flex';
+    document.getElementById('resultVideo').src = url;
+    document.getElementById('btnDownload').onclick = function() {
+      var a = document.createElement('a');
+      a.href = url; a.download = 'teleprompter.' + ext; a.click();
+    };
+    showStep('step3');
+  }
 }
 
 // ── Estilos overlay ──
