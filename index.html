@@ -132,7 +132,7 @@
       display: none; align-items: center; gap: 6px;
       background: rgba(220,50,50,.9); color: #fff;
       font-size: .75rem; font-weight: 700; padding: 4px 10px;
-      border-radius: 20px; position: absolute; top: 10px; right: 10px; z-index: 15;
+      border-radius: 20px; position: absolute; bottom: 14px; left: 14px; z-index: 15;
     }
     .rec-badge.show { display: flex; }
     .rec-dot { width: 7px; height: 7px; background: #fff; border-radius: 50%; animation: blink 1s infinite; }
@@ -290,7 +290,7 @@
       white-space:nowrap; transition:opacity .5s;
     ">&#9632; clic = pausar &nbsp;|&nbsp; &#8597; arrastrar = reposicionar</div>
     <div id="countdown"><div id="countdownNum">5</div></div>
-    <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC <span id="recTimer">00:00</span></div>
+    <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC&nbsp;<span id="recTimer" style="font-variant-numeric:tabular-nums;letter-spacing:.03em;">00:00</span></div>
   </div>
 </div>
 
@@ -564,6 +564,7 @@ function startMediaRecorder() {
   isScrolling = true;
   startScrollLoop();
   document.getElementById('recBadge').classList.add('show');
+  startRecTimer();
   setTimeout(function() { var h=document.getElementById('dragHint'); if(h) h.style.opacity='0'; }, 3000);
   document.getElementById('btnRecord').disabled = true;
   document.getElementById('btnStop').disabled   = false;
@@ -575,6 +576,7 @@ function stopRecording() {
   isScrolling = false;
   stopScrollLoop();
   document.getElementById('recBadge').classList.remove('show');
+  stopRecTimer();
   document.getElementById('btnRecord').disabled = false;
   document.getElementById('btnStop').disabled   = true;
   stopRecTimer();
