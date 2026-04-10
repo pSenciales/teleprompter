@@ -290,7 +290,7 @@
       white-space:nowrap; transition:opacity .5s;
     ">&#9632; clic = pausar &nbsp;|&nbsp; &#8597; arrastrar = reposicionar</div>
     <div id="countdown"><div id="countdownNum">5</div></div>
-    <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC</div>
+    <div class="rec-badge" id="recBadge"><div class="rec-dot"></div> REC <span id="recTimer">00:00</span></div>
   </div>
 </div>
 
@@ -572,6 +572,7 @@ function stopRecording() {
   document.getElementById('recBadge').classList.remove('show');
   document.getElementById('btnRecord').disabled = false;
   document.getElementById('btnStop').disabled   = true;
+  stopRecTimer();
 }
 
 function onRecordingStop() {
@@ -749,6 +750,31 @@ function onDragEnd(e) {
   document.removeEventListener('touchmove', onDragMove);
   document.removeEventListener('touchend',  onDragEnd);
 }
+
+
+// ── Contador de tiempo de grabación ──
+var recTimerInterval = null;
+var recStartTime = 0;
+
+function startRecTimer() {
+  recStartTime = Date.now();
+  clearInterval(recTimerInterval);
+  recTimerInterval = setInterval(function() {
+    var elapsed = Math.floor((Date.now() - recStartTime) / 1000);
+    var h = Math.floor(elapsed / 3600);
+    var m = Math.floor((elapsed % 3600) / 60);
+    var s = elapsed % 60;
+    var display = (h > 0 ? pad(h) + ':' : '') + pad(m) + ':' + pad(s);
+    document.getElementById('recTimer').textContent = display;
+  }, 500);
+}
+
+function stopRecTimer() {
+  clearInterval(recTimerInterval);
+  document.getElementById('recTimer').textContent = '00:00';
+}
+
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
 </script>
 </body>
