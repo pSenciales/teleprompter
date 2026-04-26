@@ -307,6 +307,7 @@
   </div>
   <div class="btn-row">
     <button class="btn btn-success" id="btnDownload">&#11015; Descargar</button>
+    <button class="btn btn-primary" onclick="retakeRecording()">&#9210; Repetir toma</button>
     <button class="btn btn-ghost"   onclick="resetAll()">&#128260; Nueva grabación</button>
   </div>
 </div>
@@ -678,6 +679,45 @@ function onSpeedChange2(v) {
 }
 
 // ── Reset ──
+function retakeRecording() {
+  // Limpiar estado de grabación anterior
+  recordedChunks = [];
+  usingFilePicker = false;
+  fileWritable = null;
+  scrollOffset = 0;
+  isScrolling = false;
+  lastTs = null;
+
+  // Restaurar visibilidad paso 3 para próxima vez
+  document.getElementById('resultVideo').style.display = 'block';
+  document.getElementById('savedToDiskMsg').style.display = 'none';
+  document.getElementById('btnDownload').style.display = 'inline-flex';
+  document.getElementById('resultVideo').src = '';
+
+  // Resetear botones de grabación
+  document.getElementById('btnRecord').disabled = false;
+  document.getElementById('btnStop').disabled = true;
+  document.getElementById('recBadge').classList.remove('show');
+  stopRecTimer();
+
+  // Reabrir cámara y volver al paso 2 sin tocar el guión ni los ajustes
+  navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    .then(function(s) {
+      stream = s;
+      var feed = document.getElementById('cameraFeed');
+      feed.srcObject = stream;
+      // Re-sync texto del prompter (por si acaso)
+      document.getElementById('promptText').textContent =
+        document.getElementById('scriptInput').value;
+      applyStyles();
+      showStep('step2');
+      setTimeout(function() { positionScroller(0); }, 100);
+    })
+    .catch(function(e) {
+      showError('No se pudo reabrir la cámara: ' + e.message);
+    });
+}
+
 function resetAll() {
   scrollOffset = 0; isScrolling = false; recordedChunks = [];
   document.getElementById('resultVideo').src = '';
