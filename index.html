@@ -50,10 +50,11 @@
     #speedIndicator { font-size: .72rem; color: #555; }
 
     /* ══ PASO 2 ══ */
-    #step2 { height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; }
+    #step2 { height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; position: relative; }
 
     .top-bar {
-      flex-shrink: 0; background: #0d0d16; border-bottom: 1px solid #1e1e30;
+      flex-shrink: 0; position: sticky; top: 0; z-index: 30;
+      background: #0d0d16; border-bottom: 1px solid #1e1e30;
       padding: 8px 10px; display: flex; align-items: center;
       gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch;
     }
@@ -339,6 +340,19 @@ function showError(msg) {
 function showStep(id) {
   document.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
   document.getElementById(id).classList.add('active');
+  // Prevent body scroll when in recording view, allow it otherwise
+  if (id === 'step2') {
+    document.body.style.overflow = 'hidden';
+    document.body.style.height = '100%';
+    document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.height = '100%';
+    window.scrollTo(0, 0);
+  } else {
+    document.body.style.overflow = '';
+    document.body.style.height = '';
+    document.documentElement.style.overflow = '';
+    document.documentElement.style.height = '';
+  }
 }
 
 function hexToRgb(hex) {
@@ -711,7 +725,12 @@ function retakeRecording() {
         document.getElementById('scriptInput').value;
       applyStyles();
       showStep('step2');
-      setTimeout(function() { positionScroller(0); }, 100);
+      window.scrollTo(0, 0);
+      setTimeout(function() {
+        positionScroller(0);
+        var tb = document.getElementById('step2');
+        if (tb) tb.scrollTop = 0;
+      }, 100);
     })
     .catch(function(e) {
       showError('No se pudo reabrir la cámara: ' + e.message);
